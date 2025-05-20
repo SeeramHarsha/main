@@ -2,3 +2,4 @@ Flask
 Pillow
 opencv-python
 google-generativeai
+gunicorn
