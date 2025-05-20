@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: flask-gemini-api
+    env: python
+    buildCommand: ""
+    startCommand: gunicorn app:app
+    envVars:
+      - key: PORT
+        value: 10000
+    plan: free
