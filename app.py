@@ -77,7 +77,7 @@ Analyze the visual input carefully and combine that understanding with the given
 Then generate 5 simple questions relevant that relate the concept to the visual scene and 3 in 7 should be mcqs.
 
 Each question should reflect how the concept can be applied or understood in the context of what is seen in the image/video.
-    and dont give any special characters in generated output.
+    and dont give any special characters in generated output but can use numbers.
 """
     response = model.generate_content([prompt] + visuals)
     return jsonify({"questions": response.text.strip()})
