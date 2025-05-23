@@ -132,29 +132,35 @@ def generate_answers():
     if not questions_passage or not description:
         return jsonify({"error": "Questions (as passage) and description are required"}), 400
 
-    # Split the passage into questions by newlines or numbered bullets
+    # Split the passage into individual questions
     raw_questions = [q.strip() for q in questions_passage.split('\n') if q.strip()]
     questions = []
 
     for q in raw_questions:
-        # Remove numbering like '1. ', '2) ', etc.
         if '. ' in q:
             q = q.split('. ', 1)[1]
         elif ') ' in q:
             q = q.split(') ', 1)[1]
         questions.append(q.strip())
 
-    # Generate answers
-    answers = []
+    # Generate short answers
+    qa_pairs = []
     for question in questions:
-        prompt = f"Analyze the concept '{description}' and answer the question: {question}"
+        prompt = f"""
+You are an AI tutor. Analyze the concept '{description}' and answer the following question briefly in 1–2 sentences max:
+
+Question: {question}
+Answer:"""
+
         response = model.generate_content(prompt)
-        answers.append({
+        answer = response.text.strip()
+        qa_pairs.append({
             "question": question,
-            "answer": response.text.strip()
+            "answer": answer
         })
 
-    return jsonify({'answers': answers})
+    return jsonify({'qa_pairs': qa_pairs})
+
 
 # Health check
 @app.route("/", methods=["GET"])
