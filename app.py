@@ -7,7 +7,7 @@ from PIL import Image
 import google.generativeai as genai
 
 # Setup
-app = Flask(_name_)
+app = Flask(__name__)
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -161,5 +161,5 @@ def generate_answers():
 def health_check():
     return "API is running. Available endpoints: POST /generate-questions, /generate_questions, /answer_question, /generate_answers"
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     app.run(debug=True)
