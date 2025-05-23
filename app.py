@@ -126,7 +126,7 @@ Provide a clear and concise answer."""
     clean_answer = response.text.strip()
     return jsonify({'answer': clean_answer})
 
-@app.route('/generate_answers', methods=['POST'])
+@@app.route('/generate_answers', methods=['POST'])
 def generate_answers():
     data = request.get_json()
     description = data.get('description')
@@ -135,37 +135,23 @@ def generate_answers():
     if not questions_passage or not description:
         return jsonify({"error": "Questions and description are required"}), 400
 
-    # Extract individual questions (preserve MCQs and open-ended)
-    raw_lines = questions_passage.split('\n')
-    questions = []
-    current_q = ""
-    for line in raw_lines:
-        if line.strip().startswith(('1.', '2.', '3.', '4.', '5.')):
-            if current_q:
-                questions.append(current_q.strip())
-            current_q = line
-        else:
-            current_q += '\n' + line
-    if current_q:
-        questions.append(current_q.strip())
+    if isinstance(questions_passage, list):
+        questions = questions_passage
+    else:
+        # Fallback parsing for string format
+        raw_lines = questions_passage.split('\n')
+        questions = []
+        current_q = ""
+        for line in raw_lines:
+            if line.strip().startswith(('1.', '2.', '3.', '4.', '5.')):
+                if current_q:
+                    questions.append(current_q.strip())
+                current_q = line
+            else:
+                current_q += '\n' + line
+        if current_q:
+            questions.append(current_q.strip())
 
-    qa_pairs = []
-    for q in questions:
-        prompt = f"""
-You are an expert tutor.
-Given the concept: "{description}"
-
-Answer the following question briefly (1-2 sentences only):
-
-{q}
-"""
-        response = model.generate_content(prompt)
-        qa_pairs.append({
-            "question": q,
-            "answer": response.text.strip()
-        })
-
-    return jsonify({"qa_pairs": qa_pairs})
 
 
 
