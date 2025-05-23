@@ -126,7 +126,7 @@ Provide a clear and concise answer."""
     clean_answer = response.text.strip()
     return jsonify({'answer': clean_answer})
 
-@@app.route('/generate_answers', methods=['POST'])
+@app.route('/generate_answers', methods=['POST'])
 def generate_answers():
     data = request.get_json()
     description = data.get('description')
