@@ -135,8 +135,8 @@ def generate_answers():
     if not raw_input or not description:
         return jsonify({"error": "Questions and description are required"}), 400
 
-    # raw_input is a list of questions, so just strip each
-    question_blocks = [q.strip() for q in raw_input if isinstance(q, str) and q.strip()]
+    # Split by blank lines to handle formatting (MCQs + open-ended)
+    question_blocks = [q.strip() for q in raw_input.strip().split("\n\n") if q.strip()]
 
     answers = []
     for q in question_blocks:
@@ -155,6 +155,7 @@ Answer the following question briefly in 1–2 sentences, directly and clearly:
             "answer": response.text.strip()
         })
 
+    # ✅ Return questions first, then answers
     return jsonify({
         "questions": [item["question"] for item in answers],
         "answers": [item["answer"] for item in answers]
