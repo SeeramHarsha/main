@@ -153,7 +153,11 @@ Answer the following question briefly in 1–2 sentences, directly and clearly:
             "answer": response.text.strip()
         })
 
-    return jsonify({'qa_pairs': answers})
+    # ✅ Return questions first, then answers
+    return jsonify({
+        "questions": [item["question"] for item in answers],
+        "answers": [item["answer"] for item in answers]
+    })
 
 
 
