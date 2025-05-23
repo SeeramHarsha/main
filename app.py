@@ -126,31 +126,55 @@ Provide a clear and concise answer."""
     clean_answer = response.text.strip()
     return jsonify({'answer': clean_answer})
 
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
 @app.route('/generate_answers', methods=['POST'])
 def generate_answers():
-    data = request.get_json()
-    description = data.get('description')
-    questions_passage = data.get('questions')
+    try:
+        data = request.get_json()
+        if data is None:
+            return jsonify({"error": "Missing JSON body"}), 400
 
-    if not questions_passage or not description:
-        return jsonify({"error": "Questions and description are required"}), 400
+        description = data.get('description')
+        questions_passage = data.get('questions')
 
-    if isinstance(questions_passage, list):
-        questions = questions_passage
-    else:
-        # Fallback parsing for string format
-        raw_lines = questions_passage.split('\n')
-        questions = []
-        current_q = ""
-        for line in raw_lines:
-            if line.strip().startswith(('1.', '2.', '3.', '4.', '5.')):
-                if current_q:
-                    questions.append(current_q.strip())
-                current_q = line
-            else:
-                current_q += '\n' + line
-        if current_q:
-            questions.append(current_q.strip())
+        if not description or not questions_passage:
+            return jsonify({"error": "Questions and description are required"}), 400
+
+        # Parse questions if it's a string
+        if isinstance(questions_passage, str):
+            raw_lines = questions_passage.split('\n')
+            questions = []
+            current_q = ""
+            for line in raw_lines:
+                if line.strip().startswith(('1.', '2.', '3.', '4.', '5.')):
+                    if current_q:
+                        questions.append(current_q.strip())
+                    current_q = line
+                else:
+                    current_q += '\n' + line
+            if current_q:
+                questions.append(current_q.strip())
+        else:
+            questions = questions_passage
+
+        # Dummy response
+        answers = []
+        for q in questions:
+            answers.append({
+                "question": q,
+                "answer": "This is a placeholder answer.",
+                "explanation": "This is a placeholder explanation."
+            })
+
+        return jsonify({"answers": answers})
+
+    except Exception as e:
+        print("Error occurred:", str(e))  # Logs to console
+        return jsonify({"error": str(e)}), 500
+
 
 
 
