@@ -3,3 +3,4 @@ Pillow
 opencv-python
 google-generativeai
 gunicorn
+flask_cors
