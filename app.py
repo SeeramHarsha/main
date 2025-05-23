@@ -1,21 +1,21 @@
 import os
-import base64
 import mimetypes
 import cv2
+import base64
 from flask import Flask, request, jsonify
 from PIL import Image
 import google.generativeai as genai
 
 # Setup
-app = Flask(__name__)
+app = Flask(_name_)
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Configure Gemini
+# Configure Gemini Flash
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel("models/gemini-1.5-flash")
+model = genai.GenerativeModel("models/gemini-1.5-flash-latest")
 
-# Helpers
+# Helper functions
 def load_image(path):
     return Image.open(path)
 
@@ -42,96 +42,113 @@ def load_media(file):
         "data": base64.b64encode(file.read()).decode()
     }
 
-# Endpoint 1: Generate Detailed Questions
+def process_media(file):
+    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+    file.save(file_path)
+
+    mime_type, _ = mimetypes.guess_type(file_path)
+    if mime_type and mime_type.startswith("image"):
+        visuals = [load_image(file_path)]
+    elif mime_type and mime_type.startswith("video"):
+        visuals = extract_key_frames(file_path)
+    else:
+        return None, None
+    
+    return visuals, mime_type
+
+# Routes
+@app.route("/generate-questions", methods=["POST"])
+def generate_questions_endpoint():
+    file = request.files.get("file")
+    concept = request.form.get("concept")
+
+    if not file or not concept:
+        return jsonify({"error": "File and concept are required"}), 400
+
+    visuals, mime_type = process_media(file)
+    if not visuals:
+        return jsonify({"error": "Unsupported file type"}), 400
+
+    prompt = f"""
+You are an intelligent tutor AI.
+
+Analyze the visual input carefully and combine that understanding with the given concept: "{concept}"
+
+Then generate 5 simple questions relevant that relate the concept to the visual scene and 3 in 7 should be mcqs.
+
+Each question should reflect how the concept can be applied or understood in the context of what is seen in the image/video.
+"""
+    response = model.generate_content([prompt] + visuals)
+    return jsonify({"questions": response.text.strip()})
+
 @app.route('/generate_questions', methods=['POST'])
 def generate_questions():
-    file = request.files.get('media')
-    description = request.form.get('description')
-
-    if not file or not description:
-        return jsonify({"error": "Media and description are required"}), 400
-
+    file = request.files['media']
+    description = request.form['description']
     media = load_media(file)
 
     prompt = f"""You are a visual content educator.
 Analyze the provided visual input and the concept '{description}'.
 Generate 7 concise, relevant, and concept-related questions based on the visual context.
-Number each question clearly and keep each question 5 words.
+Number each question clearly and the questions 5 words.
 Output format:
 1. Question 1
 2. Question 2
 ..."""
 
-    response = model.generate_content([prompt, media])
+    response = model.generate_content([
+        prompt,
+        media
+    ])
+
     raw_output = response.text.strip()
     questions = [q.strip().split(". ", 1)[-1] for q in raw_output.split("\n") if q.strip()]
     return jsonify({'questions': questions})
 
-# 🆕 Endpoint 2: Generate Short Recommended Questions
-@app.route('/generate_recommended_questions', methods=['POST'])
-def generate_recommended_questions():
-    file = request.files.get('media')
-    description = request.form.get('description')
-
-    if not file or not description:
-        return jsonify({"error": "Media and description are required"}), 400
-
-    media = load_media(file)
-
-    prompt = f"""You are a visual question recommender.
-Analyze the visual input and the concept '{description}'.
-Generate 7 very short recommended questions or prompts (1 to 4 words only) that relate to the visual and concept.
-These should be simple triggers or cues.
-Output format:
-1. Short question
-2. Short question
-..."""
-
-    response = model.generate_content([prompt, media])
-    raw_output = response.text.strip()
-    questions = [q.strip().split(". ", 1)[-1] for q in raw_output.split("\n") if q.strip()]
-    return jsonify({'recommended_questions': questions})
-
-# Endpoint 3: Answer a Single Question
 @app.route('/answer_question', methods=['POST'])
 def answer_question():
     data = request.get_json()
     question = data.get('question')
     description = data.get('description')
-    media_data = data.get('media')
 
-    if not question or not description or not media_data:
-        return jsonify({"error": "Question, description, and media are required"}), 400
+    if not question or not description:
+        return jsonify({"error": "Question and description are required"}), 400
 
-    media = {
-        "mime_type": media_data['mime_type'],
-        "data": media_data['data']
-    }
+    prompt = f"""Analyze the concept '{description}' and answer the following question:
+{question}
 
-    prompt = f"""Analyze the visual input and the concept '{description}'.
-Answer the question clearly and concisely:
-"{question}"."""
-
-    response = model.generate_content([prompt, media])
-    clean_answer = response.text.strip().replace('\n', ' ')
+Provide a clear and concise answer."""
+    
+    response = model.generate_content(prompt)
+    clean_answer = response.text.strip()
     return jsonify({'answer': clean_answer})
 
-# Endpoint 4: Answer Multiple Questions
 @app.route('/generate_answers', methods=['POST'])
 def generate_answers():
-    questions = request.form.getlist('questions')
-    description = request.form.get('description')
-    file = request.files.get('media')
+    data = request.get_json()
+    description = data.get('description')
+    questions_passage = data.get('questions')
 
-    if not questions or not description or not file:
-        return jsonify({"error": "Questions, description, and media are required"}), 400
+    if not questions_passage or not description:
+        return jsonify({"error": "Questions (as passage) and description are required"}), 400
 
-    media = load_media(file)
+    # Split the passage into questions by newlines or numbered bullets
+    raw_questions = [q.strip() for q in questions_passage.split('\n') if q.strip()]
+    questions = []
+
+    for q in raw_questions:
+        # Remove numbering like '1. ', '2) ', etc.
+        if '. ' in q:
+            q = q.split('. ', 1)[1]
+        elif ') ' in q:
+            q = q.split(') ', 1)[1]
+        questions.append(q.strip())
+
+    # Generate answers
     answers = []
-
     for question in questions:
         prompt = f"Analyze the concept '{description}' and answer the question: {question}"
-        response = model.generate_content([prompt, media])
+        response = model.generate_content(prompt)
         answers.append({
             "question": question,
             "answer": response.text.strip()
@@ -140,9 +157,9 @@ def generate_answers():
     return jsonify({'answers': answers})
 
 # Health check
-@app.route('/', methods=['GET'])
+@app.route("/", methods=["GET"])
 def health_check():
-    return "API is running. Endpoints: /generate_questions, /generate_recommended_questions, /answer_question, /generate_answers"
+    return "API is running. Available endpoints: POST /generate-questions, /generate_questions, /answer_question, /generate_answers"
 
-if __name__ == '__main__':
+if _name_ == "_main_":
     app.run(debug=True)
