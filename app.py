@@ -3,11 +3,13 @@ import mimetypes
 import cv2
 import base64
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from PIL import Image
 import google.generativeai as genai
 
 # Setup
 app = Flask(__name__)
+CORS(app)
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
