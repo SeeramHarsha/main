@@ -127,39 +127,33 @@ Provide a clear and concise answer."""
 def generate_answers():
     data = request.get_json()
     description = data.get('description')
-    questions_passage = data.get('questions')
+    raw_input = data.get('questions')
 
-    if not questions_passage or not description:
-        return jsonify({"error": "Questions (as passage) and description are required"}), 400
+    if not raw_input or not description:
+        return jsonify({"error": "Questions and description are required"}), 400
 
-    # Split the passage into individual questions
-    raw_questions = [q.strip() for q in questions_passage.split('\n') if q.strip()]
-    questions = []
+    # Split by blank lines to handle formatting (MCQs + open-ended)
+    question_blocks = [q.strip() for q in raw_input.strip().split("\n\n") if q.strip()]
 
-    for q in raw_questions:
-        if '. ' in q:
-            q = q.split('. ', 1)[1]
-        elif ') ' in q:
-            q = q.split(') ', 1)[1]
-        questions.append(q.strip())
-
-    # Generate short answers
-    qa_pairs = []
-    for question in questions:
+    answers = []
+    for q in question_blocks:
         prompt = f"""
-You are an AI tutor. Analyze the concept '{description}' and answer the following question briefly in 1–2 sentences max:
+You are a helpful tutor.
 
-Question: {question}
-Answer:"""
+Given the concept: "{description}"
 
+Answer the following question briefly in 1–2 sentences, directly and clearly:
+
+{q}
+"""
         response = model.generate_content(prompt)
-        answer = response.text.strip()
-        qa_pairs.append({
-            "question": question,
-            "answer": answer
+        answers.append({
+            "question": q,
+            "answer": response.text.strip()
         })
 
-    return jsonify({'qa_pairs': qa_pairs})
+    return jsonify({'qa_pairs': answers})
+
 
 
 # Health check
