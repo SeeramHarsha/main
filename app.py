@@ -130,36 +130,42 @@ Provide a clear and concise answer."""
 def generate_answers():
     data = request.get_json()
     description = data.get('description')
-    raw_input = data.get('questions')
+    questions_passage = data.get('questions')
 
-    if not raw_input or not description:
+    if not questions_passage or not description:
         return jsonify({"error": "Questions and description are required"}), 400
 
-    # Split by blank lines to handle formatting (MCQs + open-ended)
-    question_blocks = [q.strip() for q in raw_input.strip().split("\n\n") if q.strip()]
+    # Extract individual questions (preserve MCQs and open-ended)
+    raw_lines = questions_passage.split('\n')
+    questions = []
+    current_q = ""
+    for line in raw_lines:
+        if line.strip().startswith(('1.', '2.', '3.', '4.', '5.')):
+            if current_q:
+                questions.append(current_q.strip())
+            current_q = line
+        else:
+            current_q += '\n' + line
+    if current_q:
+        questions.append(current_q.strip())
 
-    answers = []
-    for q in question_blocks:
+    qa_pairs = []
+    for q in questions:
         prompt = f"""
-You are a helpful tutor.
-
+You are an expert tutor.
 Given the concept: "{description}"
 
-Answer the following question briefly in 1–2 sentences, directly and clearly:
+Answer the following question briefly (1-2 sentences only):
 
 {q}
 """
         response = model.generate_content(prompt)
-        answers.append({
+        qa_pairs.append({
             "question": q,
             "answer": response.text.strip()
         })
 
-    # ✅ Return questions first, then answers
-    return jsonify({
-        "questions": [item["question"] for item in answers],
-        "answers": [item["answer"] for item in answers]
-    })
+    return jsonify({"qa_pairs": qa_pairs})
 
 
 
