@@ -129,22 +129,37 @@ Provide a clear and concise answer."""
 @app.route('/generate_answers', methods=['POST'])
 def generate_answers():
     data = request.get_json()
-    questions = data.get('questions', [])
     description = data.get('description')
+    raw_input = data.get('questions')
 
-    if not questions or not description:
+    if not raw_input or not description:
         return jsonify({"error": "Questions and description are required"}), 400
 
+    # Split by blank lines to handle formatting (MCQs + open-ended)
+    question_blocks = [q.strip() for q in raw_input.strip().split("\n\n") if q.strip()]
+
     answers = []
-    for question in questions:
-        prompt = f"Analyze the concept '{description}' and answer the question: {question}"
+    for q in question_blocks:
+        prompt = f"""
+You are a helpful tutor.
+
+Given the concept: "{description}"
+
+Answer the following question briefly in 1–2 sentences, directly and clearly:
+
+{q}
+"""
         response = model.generate_content(prompt)
         answers.append({
-            "question": question,
+            "question": q,
             "answer": response.text.strip()
         })
 
-    return jsonify({'answers': answers})
+    # ✅ Return questions first, then answers
+    return jsonify({
+        "questions": [item["question"] for item in answers],
+        "answers": [item["answer"] for item in answers]
+    })
 
 
 
