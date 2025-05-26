@@ -130,54 +130,25 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-@app.route('/generate_answers', methods=['POST'])
+app.route('/generate_answers', methods=['POST'])
 def generate_answers():
-    try:
-        data = request.get_json()
-        if data is None:
-            return jsonify({"error": "Missing JSON body"}), 400
+    data = request.get_json()
+    questions = data.get('questions', [])
+    description = data.get('description')
 
-        description = data.get('description')
-        questions_passage = data.get('questions')
+    if not questions or not description:
+        return jsonify({"error": "Questions and description are required"}), 400
 
-        if not description or not questions_passage:
-            return jsonify({"error": "Questions and description are required"}), 400
+    answers = []
+    for question in questions:
+        prompt = f"Analyze the concept '{description}' and answer the question: {question}"
+        response = model.generate_content(prompt)
+        answers.append({
+            "question": question,
+            "answer": response.text.strip()
+        })
 
-        # Parse questions if it's a string
-        if isinstance(questions_passage, str):
-            raw_lines = questions_passage.split('\n')
-            questions = []
-            current_q = ""
-            for line in raw_lines:
-                if line.strip().startswith(('1.', '2.', '3.', '4.', '5.')):
-                    if current_q:
-                        questions.append(current_q.strip())
-                    current_q = line
-                else:
-                    current_q += '\n' + line
-            if current_q:
-                questions.append(current_q.strip())
-        else:
-            questions = questions_passage
-
-        # Dummy response
-        answers = []
-        for q in questions:
-            answers.append({
-                "question": q,
-                "answer": "This is a placeholder answer.",
-                "explanation": "This is a placeholder explanation."
-            })
-
-        return jsonify({"answers": answers})
-
-    except Exception as e:
-        print("Error occurred:", str(e))  # Logs to console
-        return jsonify({"error": str(e)}), 500
-
-
-
-
+    return jsonify({'answers': answers})
 
 
 # Health check
