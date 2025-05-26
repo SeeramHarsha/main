@@ -130,15 +130,28 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-app.route('/generate_answers', methods=['POST'])
+@app.route('/generate_answers', methods=['POST'])
 def generate_answers():
     data = request.get_json()
-    questions = data.get('questions', [])
     description = data.get('description')
+    questions_passage = data.get('questions')
 
-    if not questions or not description:
-        return jsonify({"error": "Questions and description are required"}), 400
+    if not questions_passage or not description:
+        return jsonify({"error": "Questions (as passage) and description are required"}), 400
 
+    # Split the passage into questions by newlines or numbered bullets
+    raw_questions = [q.strip() for q in questions_passage.split('\n') if q.strip()]
+    questions = []
+
+    for q in raw_questions:
+        # Remove numbering like '1. ', '2) ', etc.
+        if '. ' in q:
+            q = q.split('. ', 1)[1]
+        elif ') ' in q:
+            q = q.split(') ', 1)[1]
+        questions.append(q.strip())
+
+    # Generate answers
     answers = []
     for question in questions:
         prompt = f"Analyze the concept '{description}' and answer the question: {question}"
@@ -149,6 +162,7 @@ def generate_answers():
         })
 
     return jsonify({'answers': answers})
+
 
 
 # Health check
