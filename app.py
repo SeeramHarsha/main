@@ -1,4 +1,5 @@
 import os
+import re
 import mimetypes
 import cv2
 import base64
@@ -126,9 +127,6 @@ Provide a clear and concise answer."""
     clean_answer = response.text.strip()
     return jsonify({'answer': clean_answer})
 
-from flask import Flask, request, jsonify
-
-app = Flask(__name__)
 
 @app.route('/generate_answers', methods=['POST'])
 def generate_answers():
