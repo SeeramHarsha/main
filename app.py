@@ -137,6 +137,58 @@ Recommended Follow-up Questions:
     })
 
 
+@app.route('/generate_answers', methods=['POST'])
+def generate_answers():
+    data = request.get_json()
+    description = data.get('description', '')
+    questions_passage = data.get('questions', '')
+
+    if not questions_passage or not description:
+        return jsonify({"error": "Both questions and description are required"}), 400
+
+    # Parse multi-line questions with options
+    raw_lines = [line.strip() for line in questions_passage.split('\n') if line.strip()]
+    questions = []
+    current_question = None
+
+    for line in raw_lines:
+        # Detect numbered questions (e.g., "1.", "2)")
+        if re.match(r'^\d+[.)]\s', line):
+            if current_question:
+                questions.append(current_question)
+            # Remove numbering prefix
+            line = re.sub(r'^\d+[.)]\s*', '', line)
+            current_question = line
+        elif current_question is not None:
+            # Append options/continuations to current question
+            current_question += '\n' + line
+
+    if current_question:
+        questions.append(current_question)
+
+    # Generate answers with error handling
+    answers = []
+    for question in questions:
+        try:
+            prompt = f"""Analyze the concept "{description}" and answer this question:
+            {question}
+            
+            For multiple-choice questions, provide the letter answer (e.g., "b)") 
+            followed by a brief explanation."""
+            
+            response = model.generate_content(prompt)
+            answers.append({
+                "question": question,
+                "answer": response.text.strip() if response.text else "No response from model"
+            })
+        except Exception as e:
+            answers.append({
+                "question": question,
+                "answer": f"Error generating answer: {str(e)}"
+            })
+
+    return jsonify({'answers': answers})
+
 # Health check
 @app.route("/", methods=["GET"])
 def health_check():
