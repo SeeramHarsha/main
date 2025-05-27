@@ -85,30 +85,6 @@ Each question should reflect how the concept can be applied or understood in the
     response = model.generate_content([prompt] + visuals)
     return jsonify({"questions": response.text.strip()})
 
-@app.route('/generate_questions', methods=['POST'])
-def generate_questions():
-    file = request.files['media']
-    description = request.form['description']
-    media = load_media(file)
-
-    prompt = f"""You are a visual content educator.
-Analyze the provided visual input and the concept '{description}'.
-Generate 7 concise, relevant, and concept-related questions based on the visual context.
-Number each question clearly and the questions 5 words.
-Output format:
-1. Question 1
-2. Question 2
-..."""
-
-    response = model.generate_content([
-        prompt,
-        media
-    ])
-
-    raw_output = response.text.strip()
-    questions = [q.strip().split(". ", 1)[-1] for q in raw_output.split("\n") if q.strip()]
-    return jsonify({'questions': questions})
-
 @app.route('/answer_question', methods=['POST'])
 def answer_question():
     data = request.get_json()
@@ -118,67 +94,47 @@ def answer_question():
     if not question or not description:
         return jsonify({"error": "Question and description are required"}), 400
 
-    prompt = f"""Analyze the concept '{description}' and answer the following question:
+    # Generate answer
+    answer_prompt = f"""Analyze the concept '{description}' and answer the following question:
 {question}
 
-Provide a clear and concise answer."""
+Provide a clear and concise answer in 2-3 sentences."""
+    answer_response = model.generate_content(answer_prompt)
+    clean_answer = answer_response.text.strip()
+
+    # Generate recommended questions
+    questions_prompt = f"""Generate three concise follow-up questions based on the concept and Q/A below.
+Format each question on a separate line starting with '1.', '2.', '3.'.
+
+Concept: {description}
+Question: {question}
+Answer: {clean_answer}
+
+Recommended Follow-up Questions:
+1."""
     
-    response = model.generate_content(prompt)
-    clean_answer = response.text.strip()
-    return jsonify({'answer': clean_answer})
+    questions_response = model.generate_content(questions_prompt)
+    raw_questions = questions_response.text.strip()
 
-
-@app.route('/generate_answers', methods=['POST'])
-def generate_answers():
-    data = request.get_json()
-    description = data.get('description', '')
-    questions_passage = data.get('questions', '')
-
-    if not questions_passage or not description:
-        return jsonify({"error": "Both questions and description are required"}), 400
-
-    # Parse multi-line questions with options
-    raw_lines = [line.strip() for line in questions_passage.split('\n') if line.strip()]
+    # Parse questions
     questions = []
-    current_question = None
+    for line in raw_questions.split('\n'):
+        line = line.strip()
+        # Extract first three numbered questions
+        if len(questions) >= 3:
+            break
+        if re.match(r'^\d+[.)]', line):
+            q = re.sub(r'^\d+[.)]\s*', '', line)
+            questions.append(q)
 
-    for line in raw_lines:
-        # Detect numbered questions (e.g., "1.", "2)")
-        if re.match(r'^\d+[.)]\s', line):
-            if current_question:
-                questions.append(current_question)
-            # Remove numbering prefix
-            line = re.sub(r'^\d+[.)]\s*', '', line)
-            current_question = line
-        elif current_question is not None:
-            # Append options/continuations to current question
-            current_question += '\n' + line
+    # Ensure we always return exactly three questions
+    while len(questions) < 3:
+        questions.append("Could not generate question")
 
-    if current_question:
-        questions.append(current_question)
-
-    # Generate answers with error handling
-    answers = []
-    for question in questions:
-        try:
-            prompt = f"""Analyze the concept "{description}" and answer this question:
-            {question}
-            
-            For multiple-choice questions, provide the letter answer (e.g., "b)") 
-            followed by a brief explanation."""
-            
-            response = model.generate_content(prompt)
-            answers.append({
-                "question": question,
-                "answer": response.text.strip() if response.text else "No response from model"
-            })
-        except Exception as e:
-            answers.append({
-                "question": question,
-                "answer": f"Error generating answer: {str(e)}"
-            })
-
-    return jsonify({'answers': answers})
+    return jsonify({
+        'answer': clean_answer,
+        'recommended_questions': questions[:3]
+    })
 
 
 # Health check
