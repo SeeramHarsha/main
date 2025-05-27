@@ -103,7 +103,7 @@ Provide a clear and concise answer in 2-3 sentences."""
     clean_answer = answer_response.text.strip()
 
     # Generate recommended questions
-    questions_prompt = f"""Generate three concise follow-up questions based on the concept and Q/A below.
+    questions_prompt = f"""Generate 5 word three concise follow-up questions based on the concept and Q/A below.
 Format each question on a separate line starting with '1.', '2.', '3.'.
 
 Concept: {description}
