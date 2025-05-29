@@ -137,57 +137,112 @@ Recommended Follow-up Questions:
     })
 
 
-@app.route('/generate_answers', methods=['POST'])
-def generate_answers():
-    data = request.get_json()
-    description = data.get('description', '')
-    questions_passage = data.get('questions', '')
-
-    if not questions_passage or not description:
-        return jsonify({"error": "Both questions and description are required"}), 400
-
-    # Parse multi-line questions with options
-    raw_lines = [line.strip() for line in questions_passage.split('\n') if line.strip()]
+def parse_questions(questions_string):
+    """Parse questions string into structured format"""
     questions = []
-    current_question = None
-
-    for line in raw_lines:
-        # Detect numbered questions (e.g., "1.", "2)")
-        if re.match(r'^\d+[.)]\s', line):
-            if current_question:
-                questions.append(current_question)
-            # Remove numbering prefix
-            line = re.sub(r'^\d+[.)]\s*', '', line)
-            current_question = line
-        elif current_question is not None:
-            # Append options/continuations to current question
-            current_question += '\n' + line
-
-    if current_question:
-        questions.append(current_question)
-
-    # Generate answers with error handling
-    answers = []
-    for question in questions:
-        try:
-            prompt = f"""Analyze the concept "{description}" and answer this question:
-            {question}
+    blocks = [b.strip() for b in questions_string.split('\n\n') if b.strip()]
+    
+    for block in blocks:
+        lines = [line.strip() for line in block.split('\n') if line.strip()]
+        if not lines:
+            continue
             
-            For multiple-choice questions, provide the letter answer (e.g., "b)") 
-            followed by a brief explanation."""
+        # Extract question number and text
+        q_match = re.match(r'^(\d+)\.\s+(.*)', lines[0])
+        if not q_match:
+            continue
             
-            response = model.generate_content(prompt)
-            answers.append({
-                "question": question,
-                "answer": response.text.strip() if response.text else "No response from model"
-            })
-        except Exception as e:
-            answers.append({
-                "question": question,
-                "answer": f"Error generating answer: {str(e)}"
-            })
+        q_number = int(q_match.group(1))
+        q_text = q_match.group(2)
+        
+        # Determine question type
+        is_multiple_choice = any(
+            re.match(r'^[a-d]\)\s', line) for line in lines[1:]
+        ) or "true or false" in q_text.lower()
+        
+        # Handle options for multiple choice
+        options = {}
+        if is_multiple_choice:
+            for line in lines[1:]:
+                opt_match = re.match(r'^([a-d])\)\s*(.*)', line)
+                if opt_match:
+                    options[opt_match.group(1)] = opt_match.group(2)
+            
+            # Add true/false options if missing
+            if "true or false" in q_text.lower() and not options:
+                options = {'a': 'True', 'b': 'False'}
+        
+        questions.append({
+            "question_number": q_number,
+            "question_type": "multiple_choice" if is_multiple_choice else "open_ended",
+            "question": q_text,
+            "options": options if options else None
+        })
+    
+    return sorted(questions, key=lambda x: x['question_number'])
 
-    return jsonify({'answers': answers})
+def generate_answers(context, questions):
+    """Generate answers for all questions using Gemini"""
+    results = []
+    for q in questions:
+        # Build the prompt
+        prompt = f"""
+        CONTEXT: {context}
+        QUESTION: {q['question']}
+        """
+        
+        # Add instructions based on question type
+        if q['question_type'] == 'multiple_choice':
+            options_str = '\n'.join([f"{k}) {v}" for k, v in q['options'].items()])
+            prompt += f"\nOPTIONS:\n{options_str}\n"
+            prompt += "INSTRUCTION: Answer with ONLY the letter of the correct choice (e.g. 'a')"
+        else:
+            prompt += "\nINSTRUCTION: Answer concisely in 1-2 sentences"
+        
+        # Get Gemini response
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.2,
+                max_output_tokens=500
+            )
+        )
+        
+        # Clean and store answer
+        answer = response.text.strip()
+        if q['question_type'] == 'multiple_choice':
+            # Extract just the letter for MCQs
+            letter_match = re.search(r'^\s*([a-d])\s*$', answer, re.IGNORECASE)
+            if letter_match:
+                answer = letter_match.group(1).lower()
+        
+        # Add to results
+        q['answer'] = answer
+        results.append(q)
+    
+    return results
+
+@app.route('/generate_answers', methods=['POST'])
+def api_handler():
+    try:
+        # Get request data
+        data = request.json
+        context = data.get('context', '')
+        questions_str = data.get('questions', '')
+        
+        if not context:
+            return jsonify({"error": "Missing context"}), 400
+        if not questions_str:
+            return jsonify({"error": "Missing questions"}), 400
+        
+        # Parse and process questions
+        questions = parse_questions(questions_str)
+        results = generate_answers(context, questions)
+        
+        return jsonify({"questions": results})
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Health check
 @app.route("/", methods=["GET"])
